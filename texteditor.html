@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px solid #dadce0;
+        }
+
+        .toolbar button {
+            padding: 6px 16px;
+            background: white;
+            color: #202124;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .toolbar button:hover {
+            background: #f8f9fa;
+            border-color: #bdc1c6;
+        }
+
+        .toolbar input[type="file"] {
+            display: none;
+        }
+
+        .toolbar label {
+            padding: 6px 16px;
+            background: white;
+            color: #202124;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .toolbar label:hover {
+            background: #f8f9fa;
+            border-color: #bdc1c6;
+        }
+
+        .tabs-container {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dadce0;
+            display: flex;
+            overflow-x: auto;
+            min-height: 40px;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #e8eaed;
+            border-right: 1px solid #dadce0;
+            cursor: pointer;
+            font-size: 13px;
+            color: #5f6368;
+            white-space: nowrap;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .tab:hover {
+            background: #f1f3f4;
+        }
+
+        .tab.active {
+            background: white;
+            color: #202124;
+        }
+
+        .tab-close {
+            background: none;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .tab-close:hover {
+            background: #dadce0;
+        }
+
+        .tab.unsaved::after {
+            content: '•';
+            color: #1a73e8;
+            font-size: 20px;
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .tab.unsaved .tab-close {
+            display: none;
+        }
+
+        .editor-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .line-numbers {
+            background: #f8f9fa;
+            color: #5f6368;
+            padding: 16px 8px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 19.5px;
+            text-align: right;
+            user-select: none;
+            border-right: 1px solid #dadce0;
+            overflow-y: hidden;
+            overflow-x: hidden;
+            width: 60px;
+            min-width: 60px;
+            flex-shrink: 0;
+            white-space: pre;
+        }
+
+        #editor {
+            flex: 1;
+            padding: 16px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            border: none;
+            resize: none;
+            background: white;
+            line-height: 19.5px;
+            outline: none;
+            overflow-y: auto;
+        }
+
+        .status-bar {
+            background: #f8f9fa;
+            color: #5f6368;
+            padding: 6px 16px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #dadce0;
+        }
+
+        .new-tab-btn {
+            padding: 8px 16px !important;
+            background: white !important;
+            border: 1px solid #dadce0 !important;
+            margin: 4px !important;
+        }
+
+        .new-tab-btn:hover {
+            background: #f1f3f4 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button onclick="newTab()">New</button>
+        <label for="fileInput">Open</label>
+        <input type="file" id="fileInput" accept="*" multiple>
+        <button onclick="saveFile()">Save</button>
+        <button onclick="saveAsTxt()">Save as txt</button>
+        <button onclick="saveAsHtml()">Save as html</button>
+    </div>
+
+    <div class="tabs-container" id="tabsContainer">
+        <button class="new-tab-btn" onclick="newTab()" title="New tab">+</button>
+    </div>
+
+    <div class="editor-container">
+        <div class="line-numbers" id="lineNumbers">1</div>
+        <textarea id="editor" spellcheck="false"></textarea>
+    </div>
+
+    <div class="status-bar">
+        <span id="status">Ready</span>
+        <span id="stats">Lines: 1 | Characters: 0</span>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const fileInput = document.getElementById('fileInput');
+        const tabsContainer = document.getElementById('tabsContainer');
+        const lineNumbers = document.getElementById('lineNumbers');
+        const statusText = document.getElementById('status');
+        const statsText = document.getElementById('stats');
+
+        let tabs = [];
+        let activeTabId = null;
+        let tabIdCounter = 0;
+
+        function createTab(filename = 'Untitled', content = '', saved = true, filepath = null) {
+            const tabId = tabIdCounter++;
+            const tab = {
+                id: tabId,
+                filename: filename,
+                content: content,
+                saved: saved,
+                originalContent: content,
+                filepath: filepath
+            };
+            tabs.push(tab);
+            renderTabs();
+            switchToTab(tabId);
+            return tabId;
+        }
+
+        function renderTabs() {
+            const existingTabs = tabsContainer.querySelectorAll('.tab');
+            existingTabs.forEach(t => t.remove());
+
+            tabs.forEach(tab => {
+                const tabEl = document.createElement('div');
+                tabEl.className = 'tab' + (tab.id === activeTabId ? ' active' : '') + (!tab.saved ? ' unsaved' : '');
+                
+                const span = document.createElement('span');
+                span.textContent = tab.filename;
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'tab-close';
+                closeBtn.textContent = '×';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                };
+                
+                tabEl.appendChild(span);
+                tabEl.appendChild(closeBtn);
+                
+                tabEl.onclick = (e) => {
+                    if (e.target !== closeBtn) {
+                        switchToTab(tab.id);
+                    }
+                };
+                
+                tabsContainer.insertBefore(tabEl, tabsContainer.querySelector('.new-tab-btn'));
+            });
+        }
+
+        function switchToTab(tabId) {
+            if (activeTabId !== null) {
+                const currentTab = tabs.find(t => t.id === activeTabId);
+                if (currentTab) {
+                    currentTab.content = editor.value;
+                }
+            }
+
+            activeTabId = tabId;
+            const tab = tabs.find(t => t.id === tabId);
+            if (tab) {
+                editor.value = tab.content;
+                editor.focus();
+                updateLineNumbers();
+                updateStatus();
+                renderTabs();
+            }
+        }
+
+        function closeTab(tabId) {
+            const tabIndex = tabs.findIndex(t => t.id === tabId);
+            const tab = tabs[tabIndex];
+
+            if (!tab.saved) {
+                if (!confirm(`"${tab.filename}" has unsaved changes. Close anyway?`)) {
+                    return;
+                }
+            }
+
+            tabs.splice(tabIndex, 1);
+
+            if (tabs.length === 0) {
+                createTab();
+            } else if (tabId === activeTabId) {
+                const newActiveIndex = Math.min(tabIndex, tabs.length - 1);
+                switchToTab(tabs[newActiveIndex].id);
+            } else {
+                renderTabs();
+            }
+        }
+
+        function newTab() {
+            createTab();
+            editor.focus();
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        function saveFile() {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (!tab) return;
+
+            if (tab.filename === 'Untitled') {
+                saveAsTxt();
+                return;
+            }
+
+            const text = editor.value;
+            const filename = tab.filename;
+            
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            downloadBlob(blob, filename);
+
+            tab.saved = true;
+            tab.content = text;
+            tab.originalContent = text;
+            renderTabs();
+            statusText.textContent = `Saved "${filename}"`;
+            setTimeout(() => {
+                statusText.textContent = 'Ready';
+            }, 2000);
+        }
+
+        function saveAsTxt() {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (!tab) return;
+
+            const defaultName = tab.filename === 'Untitled' ? 'untitled' : tab.filename.replace(/\.[^/.]+$/, '');
+            const newFilename = prompt('Save as txt:', defaultName);
+            if (!newFilename || newFilename.trim() === '') return;
+
+            let filename = newFilename.trim();
+            if (!filename.endsWith('.txt')) {
+                filename += '.txt';
+            }
+
+            tab.filename = filename;
+            const text = editor.value;
+            
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            downloadBlob(blob, filename);
+
+            tab.saved = true;
+            tab.content = text;
+            tab.originalContent = text;
+            renderTabs();
+            statusText.textContent = `Saved as "${filename}"`;
+            setTimeout(() => {
+                statusText.textContent = 'Ready';
+            }, 2000);
+        }
+
+        function saveAsHtml() {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (!tab) return;
+
+            const defaultName = tab.filename === 'Untitled' ? 'untitled' : tab.filename.replace(/\.[^/.]+$/, '');
+            const newFilename = prompt('Save as html:', defaultName);
+            if (!newFilename || newFilename.trim() === '') return;
+
+            let filename = newFilename.trim();
+            if (!filename.endsWith('.html')) {
+                filename += '.html';
+            }
+
+            tab.filename = filename;
+            const text = editor.value;
+            
+            const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+            downloadBlob(blob, filename);
+
+            tab.saved = true;
+            tab.content = text;
+            tab.originalContent = text;
+            renderTabs();
+            statusText.textContent = `Saved as "${filename}"`;
+            setTimeout(() => {
+                statusText.textContent = 'Ready';
+            }, 2000);
+        }
+
+        fileInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (!files || !files.length) return;
+
+            let filesLoaded = 0;
+            const totalFiles = files.length;
+
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    createTab(file.name, e.target.result, true, file);
+                    filesLoaded++;
+                    if (filesLoaded === totalFiles) {
+                        statusText.textContent = `Opened ${totalFiles} file${totalFiles > 1 ? 's' : ''}`;
+                        setTimeout(() => {
+                            statusText.textContent = 'Ready';
+                        }, 2000);
+                    }
+                };
+                reader.onerror = function() {
+                    statusText.textContent = `Error reading "${file.name}"`;
+                };
+                reader.readAsText(file);
+            });
+
+            fileInput.value = '';
+        });
+
+        editor.addEventListener('input', function() {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (tab) {
+                tab.content = editor.value;
+                tab.saved = editor.value === tab.originalContent;
+                renderTabs();
+            }
+            updateLineNumbers();
+            updateStatus();
+        });
+
+        editor.addEventListener('scroll', function() {
+            lineNumbers.scrollTop = editor.scrollTop;
+        });
+
+        function updateLineNumbers() {
+            const lines = editor.value.split('\n').length;
+            let numbers = '';
+            for (let i = 1; i <= lines; i++) {
+                numbers += i + '\n';
+            }
+            lineNumbers.textContent = numbers;
+        }
+
+        function updateStatus() {
+            const text = editor.value;
+            const lines = text.split('\n').length;
+            const chars = text.length;
+            statsText.textContent = `Lines: ${lines} | Characters: ${chars}`;
+        }
+
+        window.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveFile();
+            }
+        });
+
+        createTab();
+        editor.focus();
+    </script>
+</body>
+</html>
